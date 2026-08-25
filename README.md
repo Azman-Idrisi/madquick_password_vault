@@ -1,145 +1,532 @@
-## TreePass PassVault
+# TreePass Vault
 
-A minimal, privacy-first password manager MVP built with Next.js (App Router), TypeScript, and MongoDB. Users can generate strong passwords, save them to a personal vault, and manage entries securely. This README follows the “Assignment: Password Generator + Secure Vault (MVP)” brief.
+A privacy-focused password vault built with **Next.js, React, TypeScript, MongoDB, and Mongoose**.
 
-### Features
-- Strong password generator with options: length, uppercase/lowercase, numbers, symbols, exclude look‑alikes
-- Simple auth (email + password) with JWT sessions
-- Vault items: title, username, password, URL, notes
-- Client-side encryption of passwords before they hit the server
-- Copy to clipboard with auto-clear after ~15s
-- Basic search/filter on vault list
+TreePass lets users create an account, sign in with JWT authentication, generate strong passwords, securely store credentials in a personal vault, and manage saved entries from a clean web interface.
 
-### Nice-to-haves (partially covered)
-- Dark UI theme
-- Editable items with created/updated timestamps
+> **Status:** MVP / Personal Project
+
+## Features
+
+### Authentication
+
+* Email/password registration and login
+* JWT-based authentication
+* Persistent client-side session
+* Logout
+* Change account password with current-password verification
+
+### Password Generator
+
+* Configurable password length from **8–32 characters**
+* Uppercase and lowercase characters
+* Numbers and symbols
+* Optional removal of look-alike characters such as `i`, `l`, `1`, `L`, `o`, `0`, and `O`
+* Password strength estimation using `zxcvbn`
+* Copy generated passwords to clipboard
+* Automatically clears the generated password from the generator after approximately 15 seconds
+
+### Password Vault
+
+* Store:
+
+  * Service / website name
+  * Username
+  * Password
+  * URL
+  * Notes
+* Search and filter vault entries
+* View saved credentials
+* Create new entries
+* Edit existing entries
+* Delete entries
+* Created and updated timestamps
+
+### Security
+
+* Account passwords hashed with `bcrypt`
+* Vault passwords encrypted using AES before database storage
+* JWT-protected vault API routes
+* User-specific vault access
+* Encryption key and JWT secret stored as server-side environment variables
+
+### UI
+
+* Responsive interface
+* Light and dark themes
+* Modal-based password generator
+* Modal-based change-password flow
+* Clean vault sidebar and detail views
 
 ---
 
 ## Tech Stack
-- Next.js 15 (App Router) + React 19 + TypeScript
-- MongoDB + Mongoose
-- Styling with Tailwind classes
-- Crypto: `crypto-js` AES for server-side encryption
-- Auth: JWT (signed with `JWT_SECRET`)
+
+| Layer             | Technology     |
+| ----------------- | -------------- |
+| Framework         | Next.js 15     |
+| Frontend          | React 19       |
+| Language          | TypeScript     |
+| Styling           | Tailwind CSS 4 |
+| Database          | MongoDB        |
+| ODM               | Mongoose       |
+| HTTP Client       | Axios          |
+| Authentication    | JSON Web Token |
+| Password Hashing  | bcrypt         |
+| Vault Encryption  | crypto-js AES  |
+| Password Strength | zxcvbn         |
 
 ---
 
-## Security Model (Short Note on Crypto Choice)
-- We use AES via `crypto-js` to encrypt the password field **server‑side** using a key from `CRYPTO_KEY` (server-only, never sent to the browser). The client sends/receives plaintext over HTTPS; the DB only ever stores ciphertext.
-- Rationale: `crypto-js` is simple and widely used. In production, prefer per‑item IVs and authenticated encryption (AES-GCM) over a static key.
+## Architecture
+
+```text
+Browser
+   │
+   ├── Authentication
+   │     ├── Register
+   │     └── Login
+   │
+   ├── Vault Interface
+   │     ├── List / Search
+   │     ├── Create
+   │     ├── View
+   │     ├── Edit
+   │     └── Delete
+   │
+   └── Password Generator
+           │
+           ▼
+     Next.js API Routes
+           │
+           ├── JWT Verification
+           ├── bcrypt Password Hashing
+           ├── AES Encryption / Decryption
+           └── MongoDB / Mongoose
+```
 
 ---
 
 ## Project Structure
+
 ```text
 app/
-  api/
-    auth/
-      register/route.tsx       # POST /api/auth/register
-      login/route.tsx          # POST /api/auth/login
-      change-password/route.ts # PUT  /api/auth/change-password
-    vault/
-      create/route.ts          # POST /api/vault/create
-      list/route.ts            # GET  /api/vault/list
-      update/[id]/route.ts     # PUT  /api/vault/update/:id
-      delete/[id]/route.ts     # DELETE /api/vault/delete/:id
-components/                    # UI: auth, vault list/detail, generator
+├── api/
+│   ├── auth/
+│   │   ├── register/route.tsx
+│   │   ├── login/route.tsx
+│   │   └── change-password/route.ts
+│   │
+│   └── vault/
+│       ├── create/route.ts
+│       ├── list/route.ts
+│       ├── update/[id]/route.ts
+│       └── delete/[id]/route.ts
+│
+├── globals.css
+├── layout.tsx
+└── page.tsx
+
+components/
+├── AuthContext.tsx
+├── LoginForm.tsx
+├── RegisterForm.tsx
+├── ChangePasswordModal.tsx
+├── PasswordGenerator.tsx
+├── PasswordGeneratorModal.tsx
+├── Vault.tsx
+├── VaultSidebar.tsx
+├── VaultItemForm.tsx
+├── VaultItemView.tsx
+├── VaultDetailPanel.tsx
+├── ThemeContext.tsx
+└── ThemeToggle.tsx
+
 lib/
-  db.ts                        # Mongo connection helper
-  crypto.ts                    # AES encrypt/decrypt helpers (client)
+├── crypto.ts
+└── db.ts
+
 models/
-  Users.ts                     # User model (email, hashed password)
-  VaultItem.ts                 # Vault item model
-types.d.ts                     # Shared types and env declarations
+├── Users.ts
+└── VaultItem.ts
+
+types.d.ts
+next.config.ts
+package.json
 ```
 
 ---
 
-## Setup
-### Prerequisites
-- Node.js 18+
-- MongoDB connection string
+## Security Model
 
-### Environment Variables
-Create a `.env.local` file at the project root:
+### Account Passwords
+
+User account passwords are never stored as plaintext.
+
+They are hashed using `bcrypt` before being stored in MongoDB.
+
+When changing a password, the application:
+
+1. Verifies the JWT.
+2. Finds the authenticated user.
+3. Verifies the current password with `bcrypt`.
+4. Hashes the new password.
+5. Stores the new hash.
+
+### Vault Passwords
+
+Vault passwords are encrypted using AES through `crypto-js`.
+
+The encryption helper is marked as server-only and reads the encryption key from:
 
 ```env
-MONGO_URI="YOUR_MONGODB_URI"
-JWT_SECRET="a-long-random-secret"
-CRYPTO_KEY="a-long-random-secret"
+CRYPTO_KEY
 ```
 
-Notes:
-- `CRYPTO_KEY` is used server‑side only (in API routes) to encrypt/decrypt vault passwords. It is never exposed to the client bundle.
+Vault API requests are authenticated using JWT Bearer tokens, and vault records are associated with the authenticated user's ID.
 
-### Install & Run
-```bash
-npm install
-npm run dev
-# open http://localhost:3000
+```text
+User Password
+     │
+     ▼
+  bcrypt
+     │
+     ▼
+MongoDB
+
+Vault Password
+     │
+     ▼
+AES Encryption
+     │
+     ▼
+MongoDB
 ```
 
-### Build & Start
-```bash
-npm run build
-npm start
-```
+> **Security Notice:** This is an MVP security implementation and has not been professionally audited. The current implementation uses AES through `crypto-js` with an environment-provided secret. A production-grade password manager should additionally consider authenticated encryption such as AES-GCM, per-item nonces/IVs, stronger key-management practices, secure HTTP-only cookies, CSRF protection, rate limiting, secure headers, and independent security review.
 
 ---
 
 ## API Reference
-All routes are under Next.js App Router API and return JSON.
 
+All API routes are relative to the application origin.
 
----
+For local development:
 
-## Server-Side Encryption
-Location: `lib/crypto.ts` (marked `server-only`, imported only by API routes)
-
-```ts
-import "server-only";
-import CryptoJS from "crypto-js";
-
-const SECRET_KEY = process.env.CRYPTO_KEY;
-
-export const encryptData = (text: string): string => {
-  return CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
-};
-
-export const decryptData = (cipherText: string): string => {
-  const bytes = CryptoJS.AES.decrypt(cipherText, SECRET_KEY);
-  return bytes.toString(CryptoJS.enc.Utf8);
-};
+```text
+http://localhost:3000
 ```
 
-Usage: UI encrypts before POST/PUT; UI decrypts after GET to display.
+### Authentication
 
----
+#### Register
 
-## User Flow (Acceptance)
-1. Register → Login to receive JWT
-2. Generate a password in the modal/component (copy auto‑clears after ~15s)
-3. Create a vault item; password is encrypted client‑side
-4. List shows items with search; select to view details
-5. Edit or Delete existing items
+```http
+POST /api/auth/register
+Content-Type: application/json
+```
 
----
+Request:
 
-
-### Demo Video
-- Demo video: <https://youtu.be/fFkwWO-2OBs>
-
----
-
-## Scripts
 ```json
 {
-  "dev": "next dev --turbopack",
-  "build": "next build --turbopack",
-  "start": "next start"
+  "email": "user@example.com",
+  "password": "your-password"
 }
 ```
 
 ---
 
+### Login
+
+```http
+POST /api/auth/login
+Content-Type: application/json
+```
+
+Request:
+
+```json
+{
+  "email": "user@example.com",
+  "password": "your-password"
+}
+```
+
+The login endpoint returns a JWT token used to authenticate protected endpoints.
+
+---
+
+### Change Password
+
+```http
+PUT /api/auth/change-password
+Authorization: Bearer <JWT>
+Content-Type: application/json
+```
+
+Request:
+
+```json
+{
+  "currentPassword": "old-password",
+  "newPassword": "new-password"
+}
+```
+
+---
+
+## Vault API
+
+All vault endpoints require:
+
+```http
+Authorization: Bearer <JWT>
+```
+
+### Create Vault Entry
+
+```http
+POST /api/vault/create
+Content-Type: application/json
+```
+
+Request:
+
+```json
+{
+  "title": "GitHub",
+  "username": "user@example.com",
+  "password": "generated-password",
+  "url": "https://github.com",
+  "notes": "Personal account"
+}
+```
+
+The password is encrypted before the vault document is stored.
+
+---
+
+### List Vault Entries
+
+```http
+GET /api/vault/list
+Authorization: Bearer <JWT>
+```
+
+The API returns the authenticated user's vault entries sorted by creation time.
+
+---
+
+### Update Vault Entry
+
+```http
+PUT /api/vault/update/<id>
+Authorization: Bearer <JWT>
+Content-Type: application/json
+```
+
+---
+
+### Delete Vault Entry
+
+```http
+DELETE /api/vault/delete/<id>
+Authorization: Bearer <JWT>
+```
+
+---
+
+## Environment Variables
+
+Create a `.env.local` file in the project root:
+
+```env
+MONGO_URI="your-mongodb-connection-string"
+JWT_SECRET="a-long-random-secret"
+CRYPTO_KEY="a-long-random-secret"
+```
+
+### Variables
+
+| Variable     | Purpose                                            |
+| ------------ | -------------------------------------------------- |
+| `MONGO_URI`  | MongoDB connection string                          |
+| `JWT_SECRET` | Secret used to sign and verify JWTs                |
+| `CRYPTO_KEY` | Server-side AES encryption key for vault passwords |
+
+**Never commit `.env.local` or real secrets to Git.**
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+Make sure you have:
+
+* Node.js 18+
+* npm
+* MongoDB or MongoDB Atlas
+* Git
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/Azman-Idrisi/madquick_password_vault.git
+cd madquick_password_vault
+```
+
+### 2. Install Dependencies
+
+```bash
+npm install
+```
+
+### 3. Configure Environment Variables
+
+Create:
+
+```text
+.env.local
+```
+
+and add:
+
+```env
+MONGO_URI="your-mongodb-connection-string"
+JWT_SECRET="a-long-random-secret"
+CRYPTO_KEY="a-long-random-secret"
+```
+
+### 4. Start Development Server
+
+```bash
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+---
+
+## Production Build
+
+Build the application:
+
+```bash
+npm run build
+```
+
+Start the production server:
+
+```bash
+npm start
+```
+
+---
+
+## Available Scripts
+
+```bash
+npm run dev
+```
+
+Starts the Next.js development server with Turbopack.
+
+```bash
+npm run build
+```
+
+Creates a production build.
+
+```bash
+npm start
+```
+
+Starts the production server.
+
+---
+
+## User Flow
+
+```text
+Register
+   │
+   ▼
+Login
+   │
+   ▼
+Vault
+   │
+   ├── Generate Password
+   │
+   ├── Create Entry
+   │
+   ├── Search Entries
+   │
+   ├── View Entry
+   │
+   ├── Edit Entry
+   │
+   ├── Delete Entry
+   │
+   └── Change Account Password
+```
+
+---
+
+## Password Generator
+
+The built-in generator supports:
+
+* Password length: **8–32 characters**
+* Lowercase letters
+* Uppercase letters
+* Numbers
+* Symbols
+* Look-alike character exclusion
+* Password strength estimation
+
+Example generated password configuration:
+
+```text
+Length:              16
+Uppercase:           ✓
+Lowercase:           ✓
+Numbers:             ✓
+Symbols:             ✓
+Exclude look-alikes: ✓
+```
+
+Password strength is evaluated using `zxcvbn`.
+
+---
+
+## Current Limitations
+
+This project is currently an MVP and should not be considered a production-grade password manager.
+
+Potential areas for future hardening include:
+
+* Authenticated encryption such as AES-GCM
+* Per-entry IV / nonce management
+* Secure HTTP-only cookie-based sessions
+* CSRF protection
+* API rate limiting
+* Stronger key-management infrastructure
+* Security headers
+* Password reset / account recovery
+* Multi-factor authentication
+* Security audit and penetration testing
+
+---
+
+## License
+
+No license is currently specified for this repository.
+
+If you plan to distribute TreePass as open-source software, add an appropriate `LICENSE` file.
